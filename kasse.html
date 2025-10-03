@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kasse</title>
+<style>
+body { font-family: Arial, sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+h1 { text-align: center; }
+input[type="text"] { width: 100px; font-size: 18px; }
+button { font-size: 18px; padding: 10px; margin: 5px; }
+table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+.totals { display: flex; justify-content: space-between; margin-top: 5px; }
+</style>
+</head>
+<body>
+<h1>Kasse</h1>
+
+<label>Gericht-Code: <input type="text" id="codeInput"></label>
+<button onclick="addItem()">Hinzufügen</button>
+<button onclick="checkout()">Bezahlen</button>
+<button onclick="exportCSV()">CSV Export</button>
+
+<table id="cartTable">
+  <thead><tr><th>Code</th><th>Name</th><th>Menge</th><th>Preis</th></tr></thead>
+  <tbody></tbody>
+</table>
+
+<div class="totals"><span>Netto</span><span id="net">0,00 €</span></div>
+<div class="totals"><span>Steuer 7%</span><span id="tax7">0,00 €</span></div>
+<div class="totals"><span>Steuer 19%</span><span id="tax19">0,00 €</span></div>
+<div class="totals"><strong>Gesamt</strong><strong id="total">0,00 €</strong></div>
+
+<script>
+const fmt = new Intl.NumberFormat('de-DE',{style:'currency',currency:'EUR'});
+
+// Menü: Gericht-Codes, Name, Preis, Steuer
+const menu = {
+  "101": {name:"Currywurst", price:6.50, tax:0.19},
+  "102": {name:"Pommes", price:2.80, tax:0.19},
+  "103": {name:"Salat (groß)", price:4.90, tax:0.07},
+  "201": {name:"Cola 0,33l", price:1.90, tax:0.19},
+  "301": {name:"Pizza Margherita", price:8.90, tax:0.07},
+  "302": {name:"Pizza Salami", price:9.90, tax:0.07}
+};
+
+let cart = [];
+
+// gespeicherte Verkäufe im localStorage
+let salesHistory = JSON.parse(localStorage.getItem("salesHistory") || "[]");
+
+function addItem() {
+  const code = document.getElementById('codeInput').value;
+  if(!menu[code]) { alert("Code nicht gefunden!"); return; }
+  const existing = cart.find(c => c.code===code);
+  if(existing) existing.qty++;
+  else cart.push({code, name: menu[code].name, price: menu[code].price, qty:1});
+  renderCart();
+  document.getElementById('codeInput').value = "";
+}
+
+function renderCart() {
+  const tbody = document.querySelector('#cartTable tbody');
+  tbody.innerHTML = "";
+  let net=0, tax7=0, tax19=0;
+  cart.forEach(c=>{
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${c.code}</td><td>${c.name}</td><td>${c.qty}</td><td>${fmt.format(c.price*c.qty)}</td>`;
+    tbody.appendChild(tr);
+
+    const lineTotal = c.price*c.qty;
+    const netLine = lineTotal/(1+menu[c.code].tax);
+    const taxLine = lineTotal - netLine;
+    net += netLine;
+    if(menu[c.code].tax===0.07) tax7 += taxLine;
+    else if(menu[c.code].tax===0.19) tax19 += taxLine;
+  });
+  document.getElementById('net').innerText = fmt.format(net);
+  document.getElementById('tax7').innerText = fmt.format(tax7);
+  document.getElementById('tax19').innerText = fmt.format(tax19);
+  document.getElementById('total').innerText = fmt.format(net+tax7+tax19);
+}
+
+function saveSale() {
+  const sale = {
+    date: new Date().toLocaleString(),
+    items: cart.map(c=>({code:c.code,name:c.name,qty:c.qty,price:c.price})),
+    total: cart.reduce((s,i)=>s+i.price*i.qty,0)
+  };
+  salesHistory.push(sale);
+  localStorage.setItem("salesHistory", JSON.stringify(salesHistory));
+}
+
+function checkout() {
+  if(cart.length===0) { alert("Warenkorb leer!"); return; }
+  saveSale();
+  alert("Beleg gespeichert!");
+  cart = [];
+  renderCart();
+}
+
+function exportCSV() {
+  let csv = "Datum;Artikel;Menge;Einzelpreis;Gesamt\n";
+  salesHistory.forEach(s=>{
+    s.items.forEach(i=>{
+      csv += `${s.date};${i.name};${i.qty};${i.price};${i.qty*i.price}\n`;
+    });
+  });
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "verkaeufe.csv";
+  a.click();
+}
+
+renderCart();
+</script>
+</body>
+</html>
